@@ -1,0 +1,3 @@
+@PACKAGE_INIT@
+include("${CMAKE_CURRENT_LIST_DIR}/agi3sdkTargets.cmake")
+check_required_components(agi3sdk)

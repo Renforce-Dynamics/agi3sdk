@@ -1,0 +1,11 @@
+{
+  "module": "agi3sdk",
+  "doctor": [
+    "-c",
+    "import agi3sdk; print(\"agi3sdk Python binding available; use scripts/build-native.sh for transport\")"
+  ],
+  "run": [
+    "-c",
+    "import agi3sdk; print(\"Use A3RobotIO explicitly in your application; no robot is opened by this command.\")"
+  ]
+}
