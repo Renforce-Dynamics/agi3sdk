@@ -1,32 +1,55 @@
 # agi3sdk
 
-独立的 A3 硬件接口：C++ 负责状态拼接、命令生命周期、超时和传输，Python 提供 `A3RobotIO`、状态与命令类型。SDK 不依赖 Cadence，不包含策略、手柄、planner 或乒乓球状态机。
+**A3 robot I/O for C++ and Python.**
+
+agi3sdk provides synchronized robot state, validated command submission and transport lifecycle management for A3. The native library exposes a C ABI and a Python `A3RobotIO` interface.
+
+- Assemble complete state snapshots with sequence and timing checks.
+- Validate commands and enforce command timeouts in the native transport.
+- Develop against the mock transport; select AimRT for hardware deployment.
+
+The SDK owns device I/O. Applications own control policies, task state machines and device activation.
+
+## Quick start
+
+Requires Linux, Python 3.10+ and `uv`. Native builds also require CMake and a C++ compiler.
 
 ```bash
-./scripts/setup.sh
-./scripts/build-native.sh
+git clone --recurse-submodules git@github.com:Renforce-Dynamics/agi3sdk.git
+cd agi3sdk
+./scripts/bootstrap.sh
+./scripts/doctor.sh
 ./scripts/test.sh
-./scripts/build.sh                       # Python 绑定 wheel
-cmake --install build --prefix "$PWD/install"  # C++ 库与头文件
+cmake --install build --prefix "$PWD/install"
 ```
 
-默认构建 mock 传输，可在没有机器人的机器上验证。Python 优先使用显式库路径、`AGI3SDK_LIBRARY`、当前 SDK 的 build 或已安装的库。分发到另一台机器时安装 CMake 产物并设置 `AGI3SDK_LIBRARY=/path/to/libagi3sdk.so`；Python wheel 不伪装成包含本地二进制的跨平台包。
+## Integration and configuration
 
-真机 transport 构建：
+There are no internal source dependencies. NumPy is installed as a Python dependency; CMake and a C++ compiler are required for native builds.
+
+Transport options are supplied explicitly through the SDK API. Native build options select transport capabilities:
 
 ```bash
 ./scripts/build-native.sh -DAGI3SDK_WITH_AIMRT=ON -DAGI3_AIMRT_SOURCE_DIR=/path/to/AimRT
 ```
 
-需先加载目标机器的 ROS 2 / joint_msgs 环境。绑定会检查传输是否编译启用；实际机器人通讯、时序和负载须在该环境验证。
+Hardware builds require the target ROS 2 message environment and AimRT sources. The Python wheel contains bindings; install the native library separately and set `AGI3SDK_LIBRARY` when it is outside the default search locations.
 
-接口与 native 使用方法见 [native/README.md](native/README.md)；Python 示例见 `tests/test_binding.py`。本仓库只由业务应用显式打开设备。
+C++ consumers use `find_package(agi3sdk 0.1 CONFIG REQUIRED)` and link `agi3sdk::agi3sdk`; set `CMAKE_PREFIX_PATH` to the installation prefix.
 
-C++ 消费者使用安装后的 CMake package：
+See the [native API and transport guide](native/README.md) and [Python binding examples](tests/test_binding.py).
 
-```cmake
-find_package(agi3sdk 0.1 CONFIG REQUIRED)
-target_link_libraries(my_controller PRIVATE agi3sdk::agi3sdk)
+## Development
+
+```bash
+./scripts/submodules.sh init    # initialize or restore pinned dependencies
+./scripts/submodules.sh check
+./scripts/test.sh
+./scripts/build.sh
 ```
 
-配置消费项目时通过 `CMAKE_PREFIX_PATH` 指定上述 install 目录。
+Submodules pin source commits; Python requirements describe package compatibility. Bootstrap installs only the explicit packages in `source-workspace.json`. `scripts/setup.sh --wheelhouse /path/to/wheels` is available for package-based installation. Upgrade dependencies by committing reviewed submodule revisions with the parent repository.
+
+## Authorship and license
+
+Developed and maintained by [Renforce Dynamics](https://github.com/Renforce-Dynamics). See [AUTHORS.md](AUTHORS.md). Project code is available under the [MIT License](LICENSE).

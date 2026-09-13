@@ -1,0 +1,6 @@
+{
+  "packages": [
+    "."
+  ],
+  "native_build": "scripts/build-native.sh"
+}

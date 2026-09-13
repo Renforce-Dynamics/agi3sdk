@@ -3,10 +3,14 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
+authors = [{name = "Renforce Dynamics"}]
+maintainers = [{name = "Renforce Dynamics"}]
+readme = "README.md"
+license = {file = "LICENSE"}
 name = "agi3sdk"
 version = "0.1.0"
 requires-python = ">=3.10"
-description = "agi3sdk: independent Cadence ecosystem component"
+description = "A3 robot I/O for C++ and Python"
 dependencies = ["numpy>=1.24"]
 
 [tool.setuptools.packages.find]
@@ -18,3 +22,8 @@ include = ["agi3sdk*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[project.urls]
+Repository = "https://github.com/Renforce-Dynamics/agi3sdk"
+Issues = "https://github.com/Renforce-Dynamics/agi3sdk/issues"
+Documentation = "https://github.com/Renforce-Dynamics/agi3sdk#readme"
