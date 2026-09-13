@@ -1,7 +1,7 @@
 # agi3sdk
 
 `agi3sdk` 是 A3 真机 transport 与策略 runtime 之间的 C++ 边界。它不包含 FSM、ONNX、
-Planet-PingPong、Nokov 或 MuJoCo 逻辑，也不读取 `.reference/`。
+planet-rally、Nokov 或 MuJoCo 逻辑，也不读取 `.reference/`。
 
 ## 已实现的接口
 
