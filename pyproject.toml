@@ -17,8 +17,8 @@ dependencies = ["numpy>=1.24"]
 where = ["src"]
 include = ["agi3sdk*"]
 
-[tool.setuptools.package-data]
-"*" = ["**/*.yaml", "**/*.json", "**/*.xml", "**/*.STL", "**/*.stl", "**/*.onnx", "**/*.npz", "**/*.hex", "**/*.md", "**/*.lock", "**/LICENSE"]
+[tool.setuptools]
+include-package-data = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
