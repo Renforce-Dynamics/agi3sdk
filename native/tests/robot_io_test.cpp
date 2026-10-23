@@ -101,6 +101,59 @@ void TestWatchdog() {
   io.Stop();
 }
 
+void TestNeckPreset() {
+  agi3sdk::Config config;
+  config.read_only = false;
+  config.command_timeout = std::chrono::milliseconds(1000);
+  config.neck_mode = agi3sdk::NeckMode::kPreset;
+  config.neck_preset_q = {0.0, 0.17};
+  config.neck_preset_max_velocity = 1.0e6;
+  {
+    auto bad = config;
+    bad.neck_preset_q[1] = 0.5;  // beyond the pitch limit
+    agi3sdk::RobotIO rejected(bad, [](const auto&) { return true; });
+    assert(!rejected.Start());
+  }
+  agi3sdk::RobotIO io(config, [](const auto&) { return true; });
+  assert(io.Start());
+  assert(io.PublishState(MakeState(1)));
+  assert(io.WaitNextState(0, std::chrono::milliseconds(1)));
+  // Takeover starts from the measured neck position, never a jump.
+  assert(io.SendPolicyCommand(MakeCommand(), 1) == agi3sdk::SendResult::kOk);
+  auto hardware = io.LastHardwareCommand();
+  assert(hardware->q_des[3] == 103.0 && hardware->q_des[4] == 104.0);
+  assert(hardware->kp[3] == config.neck_kp);
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  assert(io.SendPolicyCommand(MakeCommand(), 1) == agi3sdk::SendResult::kOk);
+  hardware = io.LastHardwareCommand();
+  assert(hardware->q_des[3] == 0.0 && hardware->q_des[4] == 0.17);
+  io.Stop();
+}
+
+void TestNeckPresetRampRate() {
+  agi3sdk::Config config;
+  config.read_only = false;
+  config.command_timeout = std::chrono::milliseconds(1000);
+  config.state_timeout = std::chrono::milliseconds(1000);
+  config.neck_mode = agi3sdk::NeckMode::kPreset;
+  config.neck_preset_q = {0.0, 0.17};
+  config.neck_preset_max_velocity = 0.5;
+  agi3sdk::RobotIO io(config, [](const auto&) { return true; });
+  assert(io.Start());
+  assert(io.PublishState(MakeState(1)));
+  assert(io.WaitNextState(0, std::chrono::milliseconds(1)));
+  assert(io.SendPolicyCommand(MakeCommand(), 1) == agi3sdk::SendResult::kOk);
+  const auto start = std::chrono::steady_clock::now();
+  std::this_thread::sleep_for(std::chrono::milliseconds(40));
+  assert(io.SendPolicyCommand(MakeCommand(), 1) == agi3sdk::SendResult::kOk);
+  const double elapsed = std::chrono::duration<double>(
+      std::chrono::steady_clock::now() - start).count();
+  const auto hardware = io.LastHardwareCommand();
+  const double moved = 103.0 - hardware->q_des[3];
+  assert(moved > 0.0 && moved <= 0.5 * elapsed + 1e-9);
+  io.Stop();
+}
+
 void TestDeliveredStateFreshness() {
   agi3sdk::Config config;
   config.read_only = false;
@@ -194,6 +247,8 @@ void TestSixStreamAssembler() {
 int main() {
   TestMappingAndGuards();
   TestWatchdog();
+  TestNeckPreset();
+  TestNeckPresetRampRate();
   TestDeliveredStateFreshness();
   TestCApi();
   TestSixStreamAssembler();

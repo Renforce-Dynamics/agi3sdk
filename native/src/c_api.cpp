@@ -32,6 +32,9 @@ agi3sdk::Config ConvertConfig(const agi3sdk_config* input) {
   config.neck_kd = input->neck_kd;
   config.safe_damping_kd = input->safe_damping_kd;
   config.read_only = input->read_only != 0;
+  config.neck_mode = static_cast<agi3sdk::NeckMode>(input->neck_mode);
+  Copy(input->neck_preset_q, config.neck_preset_q);
+  config.neck_preset_max_velocity = input->neck_preset_max_velocity;
   return config;
 }
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import ctypes
 import os
 from pathlib import Path
-from typing import Mapping
+from typing import Mapping, Sequence
 
 import numpy as np
 
@@ -14,7 +14,9 @@ from .types import RobotState
 
 POLICY_DOF = 29
 HARDWARE_DOF = 31
-SDK_ABI_VERSION = 4
+SDK_ABI_VERSION = 5
+# Values of agi3sdk_config.neck_mode (agi3sdk::NeckMode).
+_NECK_MODES = {"hold_measured": 0, "preset": 1}
 STATE_STREAM_NAMES = (
     "waist", "neck", "arms", "legs", "pelvis_imu", "torso_imu",
 )
@@ -36,6 +38,9 @@ class _Config(ctypes.Structure):
         ("neck_kd", ctypes.c_double),
         ("safe_damping_kd", ctypes.c_double),
         ("read_only", ctypes.c_int),
+        ("neck_mode", ctypes.c_int),
+        ("neck_preset_q", ctypes.c_double * 2),
+        ("neck_preset_max_velocity", ctypes.c_double),
     ]
 
 
@@ -225,6 +230,9 @@ class A3RobotIO:
         neck_kp: float = 20.0,
         neck_kd: float = 1.0,
         safe_damping_kd: float = 3.0,
+        neck_mode: str = "hold_measured",
+        neck_preset_q: Sequence[float] = (0.0, 0.0),
+        neck_preset_max_velocity: float = 0.3,
         aimrt_config_path: str | Path | None = None,
         command_publish_enabled: bool = False,
         maximum_sync_skew_ns: int = 20_000_000,
@@ -235,10 +243,17 @@ class A3RobotIO:
             raise SdkError("a read-only SDK cannot enable command publication")
         if command_publish_enabled and aimrt_config_path is None:
             raise SdkError("command publication requires an AimRT config")
+        if neck_mode not in _NECK_MODES:
+            raise SdkError(
+                f"neck_mode must be one of {sorted(_NECK_MODES)}, got {neck_mode!r}"
+            )
+        if len(neck_preset_q) != 2:
+            raise SdkError("neck_preset_q must be [head_yaw, head_pitch]")
         self._library = _load_library(library_path)
         config = _Config(
             state_timeout_ms, command_timeout_ms, neck_kp, neck_kd,
-            safe_damping_kd, int(read_only),
+            safe_damping_kd, int(read_only), _NECK_MODES[neck_mode],
+            (ctypes.c_double * 2)(*neck_preset_q), neck_preset_max_velocity,
         )
         self._handle = self._library.agi3sdk_create(ctypes.byref(config))
         if not self._handle:

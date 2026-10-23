@@ -100,3 +100,42 @@ def test_cpp_sdk_exposes_stale_snapshot_as_typed_error():
             )
     finally:
         io.close()
+
+
+def test_cpp_sdk_neck_preset_ramps_from_measured_position():
+    from agi3sdk import SdkError
+    from agi3sdk import sdk as binding
+
+    with pytest.raises(SdkError):
+        A3RobotIO(library_path=SDK_LIBRARY, neck_mode="fixed")
+    out_of_range = A3RobotIO(
+        library_path=SDK_LIBRARY, neck_mode="preset", neck_preset_q=(0.0, 0.5),
+    )
+    with pytest.raises(SdkError):
+        out_of_range.start()
+    out_of_range.close()
+
+    io = A3RobotIO(
+        library_path=SDK_LIBRARY, read_only=False, command_timeout_ms=1000,
+        neck_mode="preset", neck_preset_q=(0.0, 0.17),
+        neck_preset_max_velocity=1.0e6,
+    )
+    neck = []
+    io._test_writer = binding._CommandWriter(
+        lambda command, _user: neck.append(tuple(command.contents.q_des[3:5])) or 1
+    )
+    assert io._library.agi3sdk_set_command_writer(io._handle, io._test_writer, None)
+    io.start()
+    try:
+        hardware_q = np.zeros(31)
+        hardware_q[3:5] = (0.2, -0.3)
+        io._inject_hardware_state_for_test(1, hardware_q)
+        state = io.read_state(timeout_s=0.01)
+        zeros = np.zeros(29)
+        for _ in range(2):
+            io.write_command(JointCommand(zeros, zeros, zeros, zeros, zeros), state.sequence)
+            time.sleep(0.005)
+    finally:
+        io.close()
+    assert neck[0] == pytest.approx((0.2, -0.3))
+    assert neck[1] == pytest.approx((0.0, 0.17))

@@ -15,7 +15,7 @@ extern "C" {
 #define AGI3SDK_POLICY_DOF 29
 #define AGI3SDK_HARDWARE_DOF 31
 #define AGI3SDK_STATE_STREAMS 6
-#define AGI3SDK_ABI_VERSION 4
+#define AGI3SDK_ABI_VERSION 5
 
 typedef struct agi3sdk_handle agi3sdk_handle;
 typedef struct agi3sdk_hardware_command agi3sdk_hardware_command;
@@ -29,6 +29,10 @@ typedef struct {
   double neck_kd;
   double safe_damping_kd;
   int read_only;
+  // 0 = hold measured position (damping only), 1 = ramp to neck_preset_q.
+  int neck_mode;
+  double neck_preset_q[2];  // head_yaw, head_pitch [rad]; pitch > 0 looks down
+  double neck_preset_max_velocity;  // [rad/s]
 } agi3sdk_config;
 
 typedef struct {

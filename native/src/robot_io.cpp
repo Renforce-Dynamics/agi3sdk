@@ -31,6 +31,21 @@ bool RobotIO::Start() {
       config_.safe_damping_kd < 0.0) {
     return false;
   }
+  if (config_.neck_mode == NeckMode::kPreset) {
+    if (!std::isfinite(config_.neck_preset_max_velocity) ||
+        config_.neck_preset_max_velocity <= 0.0) {
+      return false;
+    }
+    for (std::size_t i = 0; i < 2; ++i) {
+      const double q = config_.neck_preset_q[i];
+      if (!std::isfinite(q) || q < kNeckLowerLimit[i] ||
+          q > kNeckUpperLimit[i]) {
+        return false;
+      }
+    }
+  } else if (config_.neck_mode != NeckMode::kHoldMeasured) {
+    return false;
+  }
   running_ = true;
   watchdog_thread_ = std::thread(&RobotIO::WatchdogLoop, this);
   return true;
@@ -184,7 +199,7 @@ PolicyState RobotIO::ExtractPolicyState(const RobotState& state) {
 }
 
 HardwareCommand RobotIO::ExpandPolicyCommand(const PolicyCommand& command,
-                                             const RobotState& state) const {
+                                             const RobotState& state) {
   HardwareCommand result;
   for (std::size_t policy = 0; policy < kPolicyDof; ++policy) {
     const auto hardware = kPolicyToHardware[policy];
@@ -194,10 +209,31 @@ HardwareCommand RobotIO::ExpandPolicyCommand(const PolicyCommand& command,
     result.kd[hardware] = command.kd[policy];
     result.tau_ff[hardware] = command.tau_ff[policy];
   }
-  for (std::size_t neck = 3; neck <= 4; ++neck) {
-    result.q_des[neck] = state.q[neck];
-    result.kp[neck] = config_.neck_kp;
-    result.kd[neck] = config_.neck_kd;
+  std::array<double, 2> neck_q{state.q[3], state.q[4]};
+  if (config_.neck_mode == NeckMode::kPreset) {
+    const auto now = Clock::now();
+    if (!neck_target_ || now - neck_target_at_ > config_.command_timeout) {
+      // Takeover (or resume after a pause): start the ramp from where the
+      // head actually is, so the neck never jumps.
+      neck_target_ = neck_q;
+      neck_target_at_ = now;
+    }
+    const double dt =
+        std::chrono::duration<double>(now - neck_target_at_).count();
+    const double step = config_.neck_preset_max_velocity * dt;
+    for (std::size_t i = 0; i < 2; ++i) {
+      const double error = config_.neck_preset_q[i] - (*neck_target_)[i];
+      (*neck_target_)[i] = std::abs(error) <= step
+                               ? config_.neck_preset_q[i]
+                               : (*neck_target_)[i] + std::copysign(step, error);
+    }
+    neck_target_at_ = now;
+    neck_q = *neck_target_;
+  }
+  for (std::size_t i = 0; i < 2; ++i) {
+    result.q_des[3 + i] = neck_q[i];
+    result.kp[3 + i] = config_.neck_kp;
+    result.kd[3 + i] = config_.neck_kd;
   }
   return result;
 }
