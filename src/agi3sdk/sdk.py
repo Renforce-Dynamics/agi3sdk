@@ -338,6 +338,7 @@ class A3RobotIO:
             torso_acceleration_b=np.ctypeslib.as_array(
                 state.torso_acceleration
             ).copy(),
+            pelvis_acceleration_b=np.ctypeslib.as_array(state.acceleration).copy(),
         )
 
     def write_command(self, command: JointCommand, state_sequence: int) -> None:
@@ -404,7 +405,7 @@ class A3RobotIO:
     def _inject_hardware_state_for_test(
         self, sequence: int, q, dq=None, tau_est=None, *,
         torso_quaternion_wxyz=None, torso_gyro=None, torso_acceleration=None,
-        has_torso_imu: bool | None = None,
+        has_torso_imu: bool | None = None, pelvis_acceleration=None,
     ) -> None:
         """Test/transport-conformance hook; production perception stays C++."""
         state = _HardwareState()
@@ -418,6 +419,8 @@ class A3RobotIO:
         _copy(q, state.q)
         _copy(np.zeros(HARDWARE_DOF) if dq is None else dq, state.dq)
         _copy(np.zeros(HARDWARE_DOF) if tau_est is None else tau_est, state.tau_est)
+        if pelvis_acceleration is not None:
+            _copy(pelvis_acceleration, state.pelvis_acceleration)
         if torso_quaternion_wxyz is not None:
             _copy(torso_quaternion_wxyz, state.torso_quaternion_wxyz)
         if torso_gyro is not None:

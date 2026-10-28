@@ -28,6 +28,7 @@ def test_robot_state_owns_and_normalizes_policy_snapshot():
     assert state.quaternion_wxyz.tolist() == [1.0, 0.0, 0.0, 0.0]
     assert not state.has_torso_imu
     assert state.torso_quaternion_wxyz.tolist() == [1.0, 0.0, 0.0, 0.0]
+    assert state.pelvis_acceleration_b is None
 
 
 def test_robot_state_exposes_normalized_torso_imu_snapshot():
@@ -66,8 +67,10 @@ def test_cpp_sdk_python_binding_uses_canonical_mapping():
             torso_quaternion_wxyz=np.asarray([1.0, 0.0, 0.05, 0.0]),
             torso_gyro=np.asarray([0.1, 0.2, 0.3]),
             torso_acceleration=np.asarray([0.0, 0.0, 9.7]),
+            pelvis_acceleration=np.asarray([0.3, -0.2, 9.6]),
         )
         state = io.read_state(timeout_s=0.01)
+        assert state.pelvis_acceleration_b.tolist() == pytest.approx([0.3, -0.2, 9.6])
         assert state.joint_pos.tolist() == (
             list(range(19, 31)) + list(range(0, 3)) + list(range(5, 19))
         )
