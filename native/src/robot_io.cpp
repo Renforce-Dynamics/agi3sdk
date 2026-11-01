@@ -153,6 +153,12 @@ std::optional<HardwareCommand> RobotIO::LastHardwareCommand() const {
   return last_command_;
 }
 
+std::optional<RobotState> RobotIO::LastHardwareState() const {
+  std::lock_guard lock(mutex_);
+  if (!have_state_) return std::nullopt;
+  return state_;
+}
+
 std::uint64_t RobotIO::watchdog_trip_count() const {
   std::lock_guard lock(mutex_);
   return watchdog_trip_count_;

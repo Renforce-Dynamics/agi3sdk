@@ -15,7 +15,7 @@ extern "C" {
 #define AGI3SDK_POLICY_DOF 29
 #define AGI3SDK_HARDWARE_DOF 31
 #define AGI3SDK_STATE_STREAMS 6
-#define AGI3SDK_ABI_VERSION 5
+#define AGI3SDK_ABI_VERSION 6
 
 typedef struct agi3sdk_handle agi3sdk_handle;
 typedef struct agi3sdk_hardware_command agi3sdk_hardware_command;
@@ -145,6 +145,13 @@ AGI3SDK_API int agi3sdk_publish_hardware_state(
     agi3sdk_handle* handle, const agi3sdk_hardware_state* state);
 AGI3SDK_API int agi3sdk_copy_last_hardware_command(
     agi3sdk_handle* handle, agi3sdk_hardware_command* output);
+
+// ABI 6: read-only copy of the newest assembled 31-DOF hardware state (q, dq,
+// tau_est and both IMUs in body-drive order: waist 3, neck 2, arms 14,
+// legs 12; sequence / timestamp / sync fields as assembled). Returns 0 before
+// the first state. Same lock as copy_last_hardware_command; never commands.
+AGI3SDK_API int agi3sdk_copy_last_hardware_state(
+    agi3sdk_handle* handle, agi3sdk_hardware_state* output);
 
 #ifdef __cplusplus
 }

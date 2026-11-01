@@ -74,6 +74,9 @@ class RobotIO {
   SendResult SendPolicyCommand(const PolicyCommand& command,
                                std::uint64_t state_sequence);
   std::optional<HardwareCommand> LastHardwareCommand() const;
+  // Read-only copy of the newest assembled 31-DOF snapshot (body-drive order:
+  // waist 3, neck 2, arms 14, legs 12); nullopt before the first state.
+  std::optional<RobotState> LastHardwareState() const;
   std::uint64_t watchdog_trip_count() const;
 
  private:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+from dataclasses import dataclass
 import os
 from pathlib import Path
 from typing import Mapping, Sequence
@@ -14,7 +15,11 @@ from .types import RobotState
 
 POLICY_DOF = 29
 HARDWARE_DOF = 31
-SDK_ABI_VERSION = 5
+SDK_ABI_VERSION = 6
+# Library ABIs this binding loads. ABI 6 only adds agi3sdk_copy_last_hardware_state;
+# an ABI-5 library still works, without read_hardware_state() (rollback-safe).
+SUPPORTED_ABI_VERSIONS = (5, 6)
+HARDWARE_STATE_ABI = 6
 # Values of agi3sdk_config.neck_mode (agi3sdk::NeckMode).
 _NECK_MODES = {"hold_measured": 0, "preset": 1}
 STATE_STREAM_NAMES = (
@@ -28,6 +33,39 @@ class SdkError(RuntimeError):
 
 class StateStaleError(SdkError):
     """The policy command was computed from an expired delivered snapshot."""
+
+
+@dataclass(frozen=True)
+class HardwareState:
+    """Newest assembled 31-D hardware snapshot, body-drive order:
+    waist 3 (yaw, roll, pitch), neck 2 (head_yaw, head_pitch), arms 14, legs 12."""
+
+    sequence: int
+    timestamp_ns: int
+    sync_skew_ns: int
+    sync_complete: bool
+    q: np.ndarray
+    dq: np.ndarray
+    tau_est: np.ndarray
+    pelvis_quaternion_wxyz: np.ndarray
+    pelvis_gyro: np.ndarray
+    pelvis_acceleration: np.ndarray
+    has_torso_imu: bool
+    torso_quaternion_wxyz: np.ndarray
+    torso_gyro: np.ndarray
+    torso_acceleration: np.ndarray
+
+    @property
+    def waist_q(self) -> np.ndarray:
+        return self.q[0:3]
+
+    @property
+    def neck_q(self) -> np.ndarray:
+        return self.q[3:5]
+
+    @property
+    def neck_dq(self) -> np.ndarray:
+        return self.dq[3:5]
 
 
 class _Config(ctypes.Structure):
@@ -172,11 +210,12 @@ def _load_library(path: str | Path | None):
     library.agi3sdk_abi_version.argtypes = []
     library.agi3sdk_abi_version.restype = ctypes.c_uint32
     actual_abi = int(library.agi3sdk_abi_version())
-    if actual_abi != SDK_ABI_VERSION:
+    if actual_abi not in SUPPORTED_ABI_VERSIONS:
         raise SdkError(
             "libagi3sdk.so has an incompatible C ABI version "
-            f"(expected {SDK_ABI_VERSION}, got {actual_abi}); rebuild agi3sdk"
+            f"(expected one of {SUPPORTED_ABI_VERSIONS}, got {actual_abi}); rebuild agi3sdk"
         )
+    library.agi3sdk_loaded_abi = actual_abi
     library.agi3sdk_create.argtypes = [ctypes.POINTER(_Config)]
     library.agi3sdk_create.restype = ctypes.c_void_p
     library.agi3sdk_destroy.argtypes = [ctypes.c_void_p]
@@ -210,6 +249,11 @@ def _load_library(path: str | Path | None):
         ctypes.c_void_p, ctypes.POINTER(_HardwareState),
     ]
     library.agi3sdk_publish_hardware_state.restype = ctypes.c_int
+    if actual_abi >= HARDWARE_STATE_ABI:
+        library.agi3sdk_copy_last_hardware_state.argtypes = [
+            ctypes.c_void_p, ctypes.POINTER(_HardwareState),
+        ]
+        library.agi3sdk_copy_last_hardware_state.restype = ctypes.c_int
     return library
 
 
@@ -361,6 +405,47 @@ class A3RobotIO:
             if result == 4:
                 raise StateStaleError(message)
             raise SdkError(message)
+
+    @property
+    def abi_version(self) -> int:
+        """C ABI of the loaded libagi3sdk.so."""
+        return int(self._library.agi3sdk_loaded_abi)
+
+    @property
+    def has_hardware_state(self) -> bool:
+        """True when the library exports agi3sdk_copy_last_hardware_state (ABI >= 6)."""
+        return self.abi_version >= HARDWARE_STATE_ABI
+
+    def read_hardware_state(self) -> HardwareState | None:
+        """Newest assembled 31-D hardware state (incl. the measured neck), read-only.
+
+        Non-blocking; None before the first state. Raises SdkError on an ABI-5
+        library, which has no such getter."""
+        if not self.has_hardware_state:
+            raise SdkError(
+                f"read_hardware_state needs libagi3sdk ABI >= {HARDWARE_STATE_ABI} "
+                f"(loaded ABI {self.abi_version})"
+            )
+        if not self._handle:
+            raise SdkError("A3RobotIO is closed")
+        state = _HardwareState()
+        if not self._library.agi3sdk_copy_last_hardware_state(self._handle, ctypes.byref(state)):
+            return None
+
+        def array(values):
+            return np.ctypeslib.as_array(values).copy()
+
+        return HardwareState(
+            sequence=int(state.sequence), timestamp_ns=int(state.timestamp_ns),
+            sync_skew_ns=int(state.sync_skew_ns), sync_complete=bool(state.sync_complete),
+            q=array(state.q), dq=array(state.dq), tau_est=array(state.tau_est),
+            pelvis_quaternion_wxyz=array(state.pelvis_quaternion_wxyz),
+            pelvis_gyro=array(state.pelvis_gyro),
+            pelvis_acceleration=array(state.pelvis_acceleration),
+            has_torso_imu=bool(state.has_torso_imu),
+            torso_quaternion_wxyz=array(state.torso_quaternion_wxyz),
+            torso_gyro=array(state.torso_gyro), torso_acceleration=array(state.torso_acceleration),
+        )
 
     @property
     def watchdog_trip_count(self) -> int:

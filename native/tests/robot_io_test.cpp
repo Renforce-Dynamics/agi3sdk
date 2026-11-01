@@ -45,9 +45,15 @@ void TestMappingAndGuards() {
   config.read_only = false;
   config.command_timeout = std::chrono::milliseconds(1000);
   agi3sdk::RobotIO io(config, [](const auto&) { return true; });
+  assert(!io.LastHardwareState());
   assert(io.Start());
+  assert(!io.LastHardwareState());
   assert(io.PublishState(MakeState(7)));
   assert(!io.PublishState(MakeState(7)));
+  const auto raw = io.LastHardwareState();
+  assert(raw && raw->sequence == 7 && raw->timestamp_ns == 123456);
+  assert(raw->q[3] == 103.0 && raw->q[4] == 104.0);   // neck, body-drive order
+  assert(raw->dq[3] == 203.0 && raw->q[0] == 100.0);  // waist first
 
   const auto policy = io.WaitNextState(0, std::chrono::milliseconds(1));
   assert(policy && policy->sequence == 7);
@@ -65,6 +71,7 @@ void TestMappingAndGuards() {
   // immutable snapshot already delivered to the policy.
   assert(io.PublishState(MakeState(8)));
   assert(io.SendPolicyCommand(command, 7) == agi3sdk::SendResult::kOk);
+  assert(io.LastHardwareState()->sequence == 8);      // newest assembled state
   const auto hardware = io.LastHardwareCommand();
   assert(hardware);
   assert(hardware->q_des[19] == 10.0);
@@ -174,6 +181,10 @@ void TestCApi() {
   agi3sdk_config config{50, 1000, 20.0, 1.0, 3.0, 0};
   auto* handle = agi3sdk_create(&config);
   assert(handle && agi3sdk_start(handle));
+  agi3sdk_hardware_state copied{};
+  assert(!agi3sdk_copy_last_hardware_state(handle, &copied));
+  assert(!agi3sdk_copy_last_hardware_state(nullptr, &copied));
+  assert(!agi3sdk_copy_last_hardware_state(handle, nullptr));
   agi3sdk_hardware_state input{};
   input.sequence = 9;
   input.sync_complete = 1;
@@ -191,6 +202,16 @@ void TestCApi() {
   assert(output.q[0] == 19.0 && output.q[12] == 0.0);
   assert(output.has_torso_imu == 1);
   assert(output.torso_gyro[1] == 5.0);
+  input.dq[3] = 0.5;
+  input.sequence = 10;
+  input.timestamp_ns = 777;
+  assert(agi3sdk_publish_hardware_state(handle, &input));
+  assert(agi3sdk_copy_last_hardware_state(handle, &copied));
+  assert(copied.sequence == 10 && copied.timestamp_ns == 777);
+  assert(copied.sync_complete == 1 && copied.has_torso_imu == 1);
+  for (int i = 0; i < AGI3SDK_HARDWARE_DOF; ++i) assert(copied.q[i] == i);
+  assert(copied.dq[3] == 0.5 && copied.torso_gyro[1] == 5.0);
+  assert(copied.pelvis_acceleration[2] == 9.81);
   agi3sdk_stop(handle);
   agi3sdk_destroy(handle);
 }

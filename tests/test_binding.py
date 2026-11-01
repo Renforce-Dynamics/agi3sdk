@@ -142,3 +142,52 @@ def test_cpp_sdk_neck_preset_ramps_from_measured_position():
         io.close()
     assert neck[0] == pytest.approx((0.2, -0.3))
     assert neck[1] == pytest.approx((0.0, 0.17))
+
+
+def test_read_hardware_state_returns_the_measured_neck():
+    from agi3sdk import HardwareState
+
+    io = A3RobotIO(library_path=SDK_LIBRARY, read_only=True)
+    assert io.abi_version == 6 and io.has_hardware_state
+    io.start()
+    try:
+        assert io.read_hardware_state() is None             # before the first state
+        q = np.arange(31, dtype=np.float64) * 0.01
+        q[3:5] = (0.05, -0.12)                              # head_yaw, head_pitch
+        dq = np.zeros(31)
+        dq[3:5] = (0.3, -0.4)
+        io._inject_hardware_state_for_test(5, q, dq, pelvis_acceleration=(0.1, 0.2, 9.7))
+        state = io.read_hardware_state()
+        assert isinstance(state, HardwareState)
+        assert state.sequence == 5 and state.timestamp_ns == 5 * 20_000_000 and state.sync_complete
+        np.testing.assert_array_equal(state.q, q)
+        np.testing.assert_array_equal(state.neck_q, (0.05, -0.12))
+        np.testing.assert_array_equal(state.neck_dq, (0.3, -0.4))
+        np.testing.assert_array_equal(state.waist_q, q[0:3])
+        np.testing.assert_array_equal(state.pelvis_acceleration, (0.1, 0.2, 9.7))
+        state.q[3] = 99.0                                   # an owned copy
+        assert io.read_hardware_state().q[3] == 0.05
+        # the policy view is unchanged (no neck, 29-D)
+        policy = io.read_state(timeout_s=0.01)
+        assert policy.joint_pos.shape == (29,) and policy.joint_pos[12] == q[0]
+    finally:
+        io.close()
+    with pytest.raises(Exception):
+        io.read_hardware_state()                            # closed
+
+
+def test_abi5_library_still_loads_without_the_hardware_state_reader():
+    """Rollback safety: point AGI3SDK_ABI5_LIBRARY at an ABI-5 build (skipped otherwise)."""
+    import os
+    from agi3sdk import SdkError
+
+    path = os.environ.get("AGI3SDK_ABI5_LIBRARY")
+    if not path:
+        pytest.skip("AGI3SDK_ABI5_LIBRARY not set")
+    io = A3RobotIO(library_path=path, read_only=True)
+    try:
+        assert io.abi_version == 5 and not io.has_hardware_state
+        with pytest.raises(SdkError, match="ABI >= 6"):
+            io.read_hardware_state()
+    finally:
+        io.close()

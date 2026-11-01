@@ -29,7 +29,7 @@ cmake --install build --prefix "$PWD/install"
 
 ## 接入
 
-Python 使用 `agi3sdk.A3RobotIO`：`start()` → `read_state()` → `write_command()` → `close()`；参数与调用示例见 [绑定测试](tests/test_binding.py) 和 [原生接口](native/README.md)。
+Python 使用 `agi3sdk.A3RobotIO`：`start()` → `read_state()` → `write_command()` → `close()`；`read_hardware_state()`（C ABI 6，`agi3sdk_copy_last_hardware_state`）只读返回最新组装的 31 维硬件状态（body-drive 顺序 waist 3、neck 2、arms 14、legs 12，含实测颈部角），ABI 5 的库仍可加载但没有这个函数；参数与调用示例见 [绑定测试](tests/test_binding.py) 和 [原生接口](native/README.md)。
 
 C++ 使用安装目录中的 CMake package：
 

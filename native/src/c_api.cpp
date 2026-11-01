@@ -215,6 +215,28 @@ int agi3sdk_publish_hardware_state(agi3sdk_handle* handle,
   return handle->io.PublishState(converted) ? 1 : 0;
 }
 
+int agi3sdk_copy_last_hardware_state(agi3sdk_handle* handle,
+                                     agi3sdk_hardware_state* output) {
+  if (!handle || !output) return 0;
+  const auto state = handle->io.LastHardwareState();
+  if (!state) return 0;
+  output->sequence = state->sequence;
+  output->timestamp_ns = state->timestamp_ns;
+  output->sync_skew_ns = state->sync_skew_ns;
+  output->sync_complete = state->sync_complete ? 1 : 0;
+  Copy(state->q, output->q);
+  Copy(state->dq, output->dq);
+  Copy(state->tau_est, output->tau_est);
+  Copy(state->pelvis_quaternion_wxyz, output->pelvis_quaternion_wxyz);
+  Copy(state->pelvis_gyro, output->pelvis_gyro);
+  Copy(state->pelvis_acceleration, output->pelvis_acceleration);
+  output->has_torso_imu = state->has_torso_imu ? 1 : 0;
+  Copy(state->torso_quaternion_wxyz, output->torso_quaternion_wxyz);
+  Copy(state->torso_gyro, output->torso_gyro);
+  Copy(state->torso_acceleration, output->torso_acceleration);
+  return 1;
+}
+
 int agi3sdk_copy_last_hardware_command(agi3sdk_handle* handle,
                                        agi3sdk_hardware_command* output) {
   if (!handle || !output) return 0;
